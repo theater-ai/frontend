@@ -16,6 +16,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/oauth2/callback',
+    name: 'OAuth2Callback',
+    component: () => import('@/views/OAuth2CallbackView.vue'),
+    meta: { requiresGuest: true }, // 로그인 상태에서 접근 방지
+  },
+  {
     path: '/',
     redirect: '/login',
   },

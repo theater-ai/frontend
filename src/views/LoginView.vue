@@ -57,22 +57,14 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
 
-const loginWithGoogle = async () => {
+const loginWithGoogle = () => {
   loading.value = true
-  try {
-    await authStore.loginWithGoogle()
-    router.push('/dashboard')
-  } catch (error) {
-    console.error('로그인 실패:', error)
-  } finally {
-    loading.value = false
-  }
+  // 페이지가 이동되므로 try-catch가 불필요합니다.
+  authStore.loginWithGoogle()
 }
 </script>
