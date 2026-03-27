@@ -5,7 +5,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import tailwindcss from 'tailwindcss'
+import tailwindcss from '@tailwindcss/vite'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
@@ -13,13 +13,17 @@ export default defineConfig({
   plugins: [
     vue(),
     vueDevTools(),
-    '@tailwindcss/postcss'
+    tailwindcss()
   ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  server: {
+    port: 3000,
+    strictPort: true,
+  }
 })
 
 ```
@@ -27,61 +31,74 @@ export default defineConfig({
 ```
 ./src/App.vue
 
-<script setup></script>
-
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <div class="min-h-screen bg-gray-50 text-gray-900 font-sans">
+    
+    <nav class="bg-white shadow-sm px-6 py-4 mb-8">
+      <div class="max-w-6xl mx-auto flex items-center">
+        <router-link to="/" class="text-2xl font-black text-blue-600 hover:text-blue-800 transition">
+          🎬 Movie Dashboard
+        </router-link>
+      </div>
+    </nav>
+
+    <main>
+      <router-view />
+    </main>
+
+  </div>
 </template>
 
-<style scoped></style>
+<script setup>
 
+</script>
 ```
 
 ```
 ./src/stores/auth.js
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
+  // 쿠키는 JS로 접근이 불가능하므로, 로그인 상태 플래그만 관리
+  const isAuthenticated = ref(localStorage.getItem('isLoggedIn') === 'true')
   const user = ref(null)
-  const token = ref(localStorage.getItem('token') || null)
 
-  const isAuthenticated = computed(() => !!token.value)
-
-  // 구글 OAuth 로그인장)
-  const loginWithGoogle = async () => {
-    // [방식 1] 백엔드 OAuth 리다이렉트
-    window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`
-
-    // 개발용 mock
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const mockUser = {
-          id: '1',
-          name: '홍길동',
-          email: 'user@example.com',
-          avatar: 'https://via.placeholder.com/40',
-        }
-        user.value = mockUser
-        token.value = 'mock-jwt-token'
-        localStorage.setItem('token', token.value)
-        resolve(mockUser)
-      }, 1000)
-    })
+  // 구글 OAuth 로그인 진입
+  const loginWithGoogle = () => {
+    // 실제 백엔드 OAuth 진입점으로 브라우저를 이동시킵니다.
+    // .env에 VITE_API_URL이 없다면 기본값 8080 포트를 사용합니다.
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    window.location.href = `${apiUrl}/oauth2/authorization/google`
   }
 
-  const logout = () => {
-    user.value = null
-    token.value = null
-    localStorage.removeItem('token')
+  // 콜백 페이지에서 호출할 로그인 성공 처리 로직
+  const handleAuthSuccess = () => {
+    isAuthenticated.value = true
+    localStorage.setItem('isLoggedIn', 'true')
   }
 
-  return { user, token, isAuthenticated, loginWithGoogle, logout }
+  // 로그아웃
+  const logout = async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+      // 백엔드의 로그아웃 엔드포인트 호출하여 쿠키 삭제 (중요: credentials 포함)
+      await fetch(`${apiUrl}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include' 
+      })
+    } catch (error) {
+      console.error('로그아웃 에러:', error)
+    } finally {
+      isAuthenticated.value = false
+      user.value = null
+      localStorage.removeItem('isLoggedIn')
+      window.location.href = '/login'
+    }
+  }
+
+  return { user, isAuthenticated, loginWithGoogle, handleAuthSuccess, logout }
 })
 ```
 
@@ -89,110 +106,776 @@ export const useAuthStore = defineStore('auth', () => {
 ./src/main.js
 
 import { createApp } from 'vue'
-import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
-import './assets/css/main.css'
+import './assets/main.css'
+import 'hammerjs'
 
 const app = createApp(App)
 
-app.use(createPinia())
+// 앱에 라우터 사용 등록
 app.use(router)
 
+// #app 아이디를 가진 DOM 요소에 마운트
 app.mount('#app')
 ```
 
 ```
-./src/views/LoginView.vue
+./src/components/MovieSearch.vue
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-[#f5f5f3]">
-    <div class="bg-white rounded-2xl border border-[#e8e8e5] px-10 py-12 w-full max-w-sm flex flex-col gap-7">
-
-      <!-- 로고 -->
-      <div class="flex items-center gap-2.5">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-          <rect width="32" height="32" rx="8" fill="#111"/>
-          <path d="M8 16L14 22L24 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <div class="relative w-full max-w-2xl mx-auto">
+    <div class="relative">
+      <input 
+        v-model="searchQuery" 
+        @input="handleInput"
+        @focus="showSuggestions = true"
+        type="text" 
+        placeholder="어떤 영화의 통계가 궁금하신가요? (예: 파묘)"
+        class="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-full shadow-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white"
+        :disabled="isLoading"
+      />
+      <div class="absolute inset-y-0 right-6 flex items-center pointer-events-none">
+        <svg v-if="!isLoading" class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
         </svg>
-        <h1 class="text-lg font-semibold text-[#111] tracking-tight">MyApp</h1>
+        <svg v-else class="w-6 h-6 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
       </div>
-
-      <!-- 헤딩 -->
-      <div>
-        <h2 class="text-2xl font-semibold text-[#111] tracking-tight mb-1.5">시작하기</h2>
-        <p class="text-sm text-[#888]">계정으로 로그인하여 계속하세요</p>
-      </div>
-
-      <!-- 구글 로그인 버튼 -->
-      <button
-        @click="loginWithGoogle"
-        :disabled="loading"
-        class="flex items-center justify-center gap-2.5 w-full py-3 px-4 bg-white border border-[#e0e0dc] rounded-xl text-sm font-medium text-[#333] cursor-pointer transition-colors duration-150 hover:bg-[#f9f9f7] hover:border-[#ccc] disabled:opacity-60 disabled:cursor-not-allowed"
+    </div>
+    
+    <ul 
+      v-if="showSuggestions && suggestions.length > 0 && !isLoading" 
+      class="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl max-h-80 overflow-y-auto"
+    >
+      <li 
+        v-for="movie in suggestions" 
+        :key="movie.movie_cd"
+        @click="selectMovie(movie)"
+        class="px-6 py-3 cursor-pointer hover:bg-blue-50 transition-colors border-b last:border-0 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1"
       >
-        <template v-if="!loading">
-          <svg width="18" height="18" viewBox="0 0 18 18">
-            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
-            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
-            <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
-            <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
-          </svg>
-          Google로 계속하기
-        </template>
+        <span class="font-bold text-gray-800 text-lg">{{ movie.movie_nm }}</span>
+        <span class="text-sm text-gray-500">
+          {{ movie.open_dt ? movie.open_dt.substring(0, 4) : '미개봉' }} | {{ movie.director }}
+        </span>
+      </li>
+    </ul>
 
-        <template v-else>
-          <span class="flex items-center gap-1">
-            <span class="w-1.5 h-1.5 bg-[#999] rounded-full animate-bounce [animation-delay:0s]"></span>
-            <span class="w-1.5 h-1.5 bg-[#999] rounded-full animate-bounce [animation-delay:0.15s]"></span>
-            <span class="w-1.5 h-1.5 bg-[#999] rounded-full animate-bounce [animation-delay:0.3s]"></span>
-          </span>
-        </template>
-      </button>
+    <div v-if="errorMsg" class="mt-4 px-4 py-3 bg-red-50 text-red-600 rounded-lg text-center">
+      {{ errorMsg }}
+    </div>
 
-      <!-- 약관 -->
-      <p class="text-xs text-[#aaa] text-center leading-relaxed">
-        계속하면
-        <a href="#" class="text-[#666] underline underline-offset-2">이용약관</a>
-        및
-        <a href="#" class="text-[#666] underline underline-offset-2">개인정보처리방침</a>에
-        동의하는 것으로 간주됩니다
-      </p>
+    <div v-if="isLoading" class="mt-4 text-center text-blue-600 font-medium animate-pulse">
+      영화 데이터를 수집하고 분석 중입니다... 잠시만 기다려주세요! 🍿
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '../api';
+
+const router = useRouter();
+const searchQuery = ref('');
+const suggestions = ref([]);
+const showSuggestions = ref(false);
+const isLoading = ref(false);
+const errorMsg = ref('');
+
+let debounceTimeout = null;
+
+// 검색어 입력 처리 (디바운싱 적용)
+const handleInput = () => {
+  errorMsg.value = ''; // 에러 초기화
+  
+  if (debounceTimeout) clearTimeout(debounceTimeout);
+  
+  if (searchQuery.value.trim().length < 2) {
+    suggestions.value = [];
+    return;
+  }
+
+  // 사용자가 타이핑을 멈추고 300ms 후에 API 요청
+  debounceTimeout = setTimeout(async () => {
+    try {
+      const data = await api.suggest(searchQuery.value);
+      suggestions.value = data.suggestions || [];
+      showSuggestions.value = true;
+    } catch (err) {
+      console.error(err);
+      // 자동완성 에러는 화면에 굳이 크게 띄우지 않고 콘솔에만 남깁니다.
+    }
+  }, 300);
+};
+
+// 영화 선택 시 (데이터 스크래핑 후 대시보드 이동)
+const selectMovie = async (movie) => {
+  showSuggestions.value = false;
+  searchQuery.value = movie.movie_nm;
+  isLoading.value = true;
+  errorMsg.value = '';
+  
+  try {
+    // 1. 우리 DB에 이미 저장된 영화인지 검색 (빠름)
+    // 정확한 매칭을 위해 백엔드의 search API 호출
+    const searchResult = await api.search(movie.movie_nm);
+    
+    // 결과 중 이름이 정확히 일치하는 영화가 있는지 확인
+    const existingMovie = searchResult.results.find(
+      m => m.movie_nm === movie.movie_nm
+    );
+
+    let targetMovieCd = '';
+
+    if (existingMovie) {
+      // 2-A. DB에 이미 있다면? 스크래핑 생략하고 바로 해당 코드로 대시보드 직행! 🚀
+      targetMovieCd = existingMovie.movie_cd;
+    } else {
+      // 2-B. DB에 없다면? 그때만 무거운 스크래핑 API 호출 🐢
+      const scrapeResult = await api.scrape(movie.movie_nm);
+      targetMovieCd = scrapeResult.movie_cd;
+    }
+    
+    // 3. 대시보드 화면으로 이동
+    router.push({ name: 'Dashboard', params: { movieCd: targetMovieCd } });
+    
+  } catch (error) {
+    errorMsg.value = error.message || '데이터를 가져오는 데 실패했습니다.';
+    searchQuery.value = ''; 
+  } finally {
+    isLoading.value = false;
+  }
+};
+</script>
+```
+
+```
+./src/components/MarketingCharts.vue
+
+<template>
+  <div class="relative w-full h-[450px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+    <button 
+      v-if="isZoomed && !disableZoom"
+      @click="resetZoom"
+      class="absolute top-4 right-4 z-10 px-3 py-1 text-xs bg-gray-800 text-white rounded-md opacity-80 hover:opacity-100 transition"
+    >
+      줌 리셋 ↺
+    </button>
+
+    <Bar v-if="type === 'bar' || type === 'mixed'" ref="chartRef" :data="chartData" :options="finalOptions" />
+    <Line v-else-if="type === 'line'" ref="chartRef" :data="chartData" :options="finalOptions" />
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, defineProps } from 'vue';
+import { Bar, Line } from 'vue-chartjs';
+import {
+  Chart as ChartJS, Title, Tooltip, Legend, LineElement, PointElement,
+  CategoryScale, LinearScale, BarElement, Filler
+} from 'chart.js';
+import zoomPlugin from 'chartjs-plugin-zoom';
+
+ChartJS.register(
+  Title, Tooltip, Legend, LineElement, PointElement, 
+  CategoryScale, LinearScale, BarElement, Filler, zoomPlugin
+);
+
+const props = defineProps({
+  type: { type: String, default: 'line' },
+  chartData: { type: Object, required: true },
+  chartOptions: { type: Object, required: true },
+  disableZoom: { type: Boolean, default: false } // 추가: 줌 비활성화 옵션
+});
+
+const chartRef = ref(null);
+const isZoomed = ref(false);
+
+const resetZoom = () => {
+  if (chartRef.value && chartRef.value.chart) {
+    chartRef.value.chart.resetZoom();
+    isZoomed.value = false;
+  }
+};
+
+const finalOptions = computed(() => {
+  const base = { ...props.chartOptions };
+  if (!base.plugins) base.plugins = {};
+
+  // disableZoom이 true면 줌 플러그인 설정을 건너뜀
+  if (!props.disableZoom) {
+    base.plugins.zoom = {
+      pan: { enabled: true, mode: 'x' },
+      zoom: {
+        wheel: { enabled: true },
+        pinch: { enabled: true },
+        mode: 'x',
+        onZoom: () => { isZoomed.value = true; },
+        onPan: () => { isZoomed.value = true; }
+      },
+    };
+  } else {
+    base.plugins.zoom = false;
+  }
+
+  base.interaction = { mode: 'index', intersect: false };
+  return base;
+});
+</script>
+```
+
+```
+./src/components/BoxofficeChart.vue
+
+<template>
+  <div class="w-full h-80">
+    <Line 
+      v-if="chartData.labels.length > 0" 
+      :data="chartData" 
+      :options="chartOptions" 
+    />
+    <div v-else class="flex items-center justify-center h-full text-gray-400 bg-gray-50 rounded-lg">
+      박스오피스 데이터가 없습니다.
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, defineProps } from 'vue';
+import { Line } from 'vue-chartjs';
+// Chart.js 핵심 모듈 등록 (필수)
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  Filler // 선 아래 색상 채우기용
+} from 'chart.js';
+
+// Chart.js 모듈 등록
+ChartJS.register(
+  Title,
+  Tooltip,
+  Legend,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  Filler
+);
+
+// 부모 컴포넌트(DashboardView)로부터 boxoffice 데이터 배열을 받습니다.
+const props = defineProps({
+  boxofficeData: {
+    type: Array,
+    required: true,
+    default: () => []
+  }
+});
+
+// 백엔드 데이터를 Chart.js 포맷으로 변환 (Computed 사용)
+const chartData = computed(() => {
+  // 날짜순으로 정렬 (혹시 안 되어 있을까 봐)
+  const sortedData = [...props.boxofficeData].sort(
+    (a, b) => new Date(a.target_date) - new Date(b.target_date)
+  );
+
+  return {
+    // X축 레이블: 날짜 (YYYY-MM-DD)
+    labels: sortedData.map(d => d.target_date),
+    datasets: [
+      {
+        label: '일별 관객수',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)', // 파란색 투명 배경 (Filler)
+        borderColor: '#3b82f6', // 파란색 선
+        borderWidth: 3,
+        pointBackgroundColor: '#fff',
+        pointBorderColor: '#3b82f6',
+        pointHoverBackgroundColor: '#3b82f6',
+        pointHoverBorderColor: '#fff',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.3, // 선 곡선화 (0이면 직선)
+        fill: true, // 선 아래 색상 채우기
+        // Y축 데이터: 관객수
+        data: sortedData.map(d => d.audi_cnt)
+      }
+    ]
+  };
+});
+
+// 차트 옵션 설정
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false, // 부모 div 크기에 맞춤
+  plugins: {
+    legend: {
+      display: false // 범례 숨김 (데이터셋이 하나이므로)
+    },
+    tooltip: {
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      padding: 12,
+      titleFont: { size: 14, weight: 'bold' },
+      bodyFont: { size: 13 },
+      cornerRadius: 8,
+      callbacks: {
+        // 툴팁 숫자 포맷팅 (쉼표 추가)
+        label: function(context) {
+          return context.parsed.y.toLocaleString() + ' 명';
+        }
+      }
+    }
+  },
+  scales: {
+    x: {
+      grid: {
+        display: false // X축 그리드 숨김
+      },
+      ticks: {
+        color: '#9ca3af', // gray-400
+        maxRotation: 0, // 글자 회전 방지
+        autoSkip: true, // 레이블 겹침 방지
+        maxTicksLimit: 10 // 최대 레이블 개수 제한
+      }
+    },
+    y: {
+      beginAtZero: true, // 0부터 시작
+      border: {
+        dash: [4, 4] // 점선축
+      },
+      grid: {
+        color: '#f3f4f6' // gray-100
+      },
+      ticks: {
+        color: '#9ca3af',
+        // Y축 숫자 포맷팅 (1000단위 쉼표)
+        callback: function(value) {
+          return value.toLocaleString();
+        }
+      }
+    }
+  }
+};
+</script>
+```
+
+```
+./src/api/index.js
+
+// Vite 환경변수에서 API 기본 주소를 가져옵니다. 
+// (.env 파일에 VITE_API_BASE_URL=http://localhost:8000 설정 필요)
+// 설정이 없다면 기본값으로 http://localhost:8000을 사용합니다.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+export const api = {
+  /**
+   * 실시간 영화 제목 자동완성 (KOBIS API 직접 검색)
+   * @param {string} query - 검색할 영화 제목 조각
+   * @returns {Promise<Object>} - { query: string, suggestions: Array }
+   */
+  async suggest(query) {
+    if (!query) return { suggestions: [] };
+    const res = await fetch(`${API_BASE_URL}/movies/suggest?q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error('자동완성 데이터를 가져오는 데 실패했습니다.');
+    return res.json();
+  },
+
+  /**
+   * DB에 이미 적재된 영화 목록 검색
+   * @param {string} query - 검색할 영화 제목
+   * @returns {Promise<Object>} - { query: string, count: number, results: Array }
+   */
+  async search(query) {
+    if (!query) return { results: [] };
+    const res = await fetch(`${API_BASE_URL}/movies/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error('영화 검색에 실패했습니다.');
+    return res.json();
+  },
+
+  /**
+   * 새로운 영화 스크래핑 및 DB 적재 (KOBIS + TMDB)
+   * @param {string} title - 적재할 영화 제목
+   * @returns {Promise<Object>} - { movie_cd, movie_nm, boxoffice_rows, message }
+   */
+  async scrape(title) {
+    const res = await fetch(`${API_BASE_URL}/movies/scrape?title=${encodeURIComponent(title)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    // 404 등 백엔드에서 내려주는 에러 메시지 처리를 위해 분기
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || '영화 데이터를 적재하는 데 실패했습니다.');
+    }
+    
+    return res.json();
+  },
+
+  /**
+   * 특정 영화의 대시보드 통계 데이터 조회
+   * @param {string} movieCd - 영화 고유 코드
+   * @param {string} [dateFrom] - 조회 시작일 (YYYY-MM-DD)
+   * @param {string} [dateTo] - 조회 종료일 (YYYY-MM-DD)
+   * @returns {Promise<Object>} - 영화 상세 정보 및 박스오피스 시계열 데이터
+   */
+  async getDashboard(movieCd, dateFrom = null, dateTo = null) {
+    // 쿼리 파라미터 조립
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE_URL}/movies/${movieCd}/dashboard${queryString}`);
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || '대시보드 데이터를 불러올 수 없습니다.');
+    }
+    
+    return res.json();
+  }
+};
+```
+
+```
+./src/views/DashboardView.vue
+
+<template>
+  <div v-if="loading && !dashboardData" class="flex justify-center py-20 text-blue-500 animate-pulse font-bold">
+    마케팅 인사이트를 분석 중입니다...
+  </div>
+
+  <div v-else-if="dashboardData" class="max-w-7xl mx-auto p-6 pb-20 bg-gray-50 min-h-screen">
+    
+    <div class="flex flex-col md:flex-row gap-10 mb-10 items-start p-8 bg-white rounded-3xl shadow-sm border border-gray-100">
+      <img 
+        v-if="dashboardData.movie.poster_url" 
+        :src="dashboardData.movie.poster_url" 
+        alt="영화 포스터" 
+        class="w-full md:w-60 h-auto rounded-2xl shadow-xl object-cover flex-shrink-0"
+      />
+      <div v-else class="w-full md:w-60 h-80 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400 flex-shrink-0">
+        포스터 없음
+      </div>
+
+      <div class="flex-1 min-w-0">
+        <div class="mb-5">
+          <h1 class="text-4xl md:text-5xl font-extrabold mb-2 tracking-tight text-gray-950">
+            {{ dashboardData.movie.movie_nm }} 
+          </h1>
+          <p class="text-lg text-gray-500 font-medium">{{ dashboardData.movie.movie_nm_en }}</p>
+          <div class="flex flex-wrap gap-2 text-sm mt-4">
+            <span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-medium">개봉: {{ dashboardData.movie.open_dt || '미정' }}</span>
+            <span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full font-medium">{{ dashboardData.movie.rep_genre_nm }}</span>
+          </div>
+        </div>
+        
+        <div class="mb-6">
+          <h3 class="text-sm font-bold mb-2 text-gray-400 tracking-wider uppercase">줄거리</h3>
+          <p class="text-gray-800 leading-relaxed text-[15px] max-h-40 overflow-y-auto pr-2">
+            {{ dashboardData.movie.synopsis || '등록된 줄거리가 없습니다.' }}
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-700 border-t border-gray-100 pt-5">
+          <p><strong>감독:</strong> {{ dashboardData.directors.map(d => d.person.people_nm).join(', ') || '정보 없음' }} </p>
+          <p><strong>주요 배우:</strong> {{ dashboardData.actors.slice(0, 5).map(a => a.person.people_nm).join(', ') || '정보 없음' }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="sticky top-4 z-30 bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-sm mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-gray-200">
+      <h2 class="text-lg font-bold flex items-center gap-2 text-gray-800">
+        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        분석 기간 설정
+      </h2>
+      <div class="flex items-center gap-2">
+        <input type="date" v-model="dateFrom" class="px-3 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition" />
+        <span class="text-gray-400 font-medium">~</span>
+        <input type="date" v-model="dateTo" class="px-3 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition" />
+        <button 
+          @click="applyDateRange" 
+          class="ml-2 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm disabled:opacity-50"
+          :disabled="loading"
+        >
+          {{ loading ? '적용 중...' : '적용' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-8 mb-12">
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <h3 class="text-xl font-bold mb-5 text-gray-950">요일별 관람 패턴 (타겟팅 분석)</h3>
+        <MarketingCharts :disableZoom="true" type="bar" :chartData="dowChartData" :chartOptions="dowChartOptions" />
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+        <h3 class="text-xl font-bold text-gray-950">일자별 상세 데이터 (Raw Data)</h3>
+        <span class="text-sm text-gray-500">총 {{ dashboardData.boxoffice.length }}일치 데이터</span>
+      </div>
+      
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-right text-gray-600 whitespace-nowrap">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b border-gray-200">
+            <tr>
+              <th scope="col" class="px-4 py-3 text-center sticky left-0 bg-gray-100 z-10 border-r">날짜</th>
+              <th scope="col" class="px-4 py-3 text-center">순위</th>
+              <th scope="col" class="px-4 py-3">관객수<br/><span class="text-[10px] text-gray-400 font-normal">(전일비)</span></th>
+              <th scope="col" class="px-4 py-3">매출액<br/><span class="text-[10px] text-gray-400 font-normal">(전일비)</span></th>
+              <th scope="col" class="px-4 py-3">상영점유율</th>
+              <th scope="col" class="px-4 py-3">좌석판매율</th>
+              <th scope="col" class="px-4 py-3">스크린수<br/><span class="text-[10px] text-gray-400 font-normal">(점유율)</span></th>
+              <th scope="col" class="px-4 py-3">상영횟수</th>
+              <th scope="col" class="px-4 py-3">누적 관객수</th>
+              <th scope="col" class="px-4 py-3">누적 매출액</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in reversedBoxoffice" :key="row.target_date" class="bg-white border-b hover:bg-gray-50 transition">
+              <td class="px-4 py-3 text-center font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">{{ row.target_date }}</td>
+              <td class="px-4 py-3 text-center font-bold">{{ row.rank_num }}위</td>
+              
+              <td class="px-4 py-3">
+                <span class="font-bold text-gray-900">{{ (row.audi_cnt || 0).toLocaleString() }}</span>
+                <span class="ml-1 text-xs" :class="row.audi_change_dod > 0 ? 'text-red-500' : 'text-blue-500'">
+                  ({{ row.audi_change_dod > 0 ? '+' : '' }}{{ (row.audi_change_dod || 0).toLocaleString() }})
+                </span>
+              </td>
+              
+              <td class="px-4 py-3">
+                <span class="font-bold text-gray-900">{{ (row.sales_amt || 0).toLocaleString() }}</span>
+                <span class="ml-1 text-xs" :class="row.sales_change_dod > 0 ? 'text-red-500' : 'text-blue-500'">
+                  ({{ row.sales_change_dod > 0 ? '+' : '' }}{{ (row.sales_change_dod || 0).toLocaleString() }})
+                </span>
+              </td>
+              
+              <td class="px-4 py-3 font-bold text-purple-600">{{ row.show_share || 0 }}%</td>
+              <td class="px-4 py-3 font-bold text-rose-500">{{ row.seat_sales_rate || 0 }}%</td>
+              
+              <td class="px-4 py-3">
+                {{ (row.screen_cnt || 0).toLocaleString() }}개
+                <span class="text-xs text-gray-400 ml-1">({{ row.screen_share || 0 }}%)</span>
+              </td>
+              
+              <td class="px-4 py-3">{{ (row.show_cnt || 0).toLocaleString() }}회</td>
+              <td class="px-4 py-3 text-blue-600 font-bold">{{ (row.acc_audi_cnt || 0).toLocaleString() }}</td>
+              <td class="px-4 py-3 text-green-600 font-bold">{{ (row.acc_sales_amt || 0).toLocaleString() }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="space-y-8">
+      
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-xl font-bold text-gray-950">흥행 추이 (누적 vs 일일 관객)</h3>
+          <div class="text-xs text-gray-400 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M.133 11.118l2.897.777M3.088 2.228l1.102-.635m8.045 7.906l.635 1.102m3.949-8.045l-.635 1.102m.747 9.876l9.876.747"></path></svg>
+            그래프를 마우스 휠로 확대/축소, 드래그로 이동해 보세요.
+          </div>
+        </div>
+        <MarketingCharts type="mixed" :chartData="trendChartData" :chartOptions="trendChartOptions" />
+      </div>
+
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <h3 class="text-xl font-bold mb-5 text-gray-950">스크린 효율성 분석 (상영점유율 vs 좌석판매율)</h3>
+        <MarketingCharts type="line" :chartData="efficiencyChartData" :chartOptions="efficiencyChartOptions" />
+      </div>
+
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <h3 class="text-xl font-bold mb-5 text-gray-950">요일별 관람 패턴 (타겟팅 분석)</h3>
+        <MarketingCharts type="bar" :chartData="dowChartData" :chartOptions="dowChartOptions" />
+      </div>
 
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { ref, computed, onMounted } from 'vue';
+import { api } from '../api';
+import MarketingCharts from '../components/MarketingCharts.vue';
 
-const router = useRouter()
-const authStore = useAuthStore()
-const loading = ref(false)
+const props = defineProps({ movieCd: String });
+const dashboardData = ref(null);
+const loading = ref(true);
 
-const loginWithGoogle = async () => {
-  loading.value = true
+// --- 추가: 기간 설정 상태 ---
+const dateFrom = ref('');
+const dateTo = ref('');
+// -------------------------
+
+// ─── 데이터 fetching 함수 분리 ───────────────────────────────────────────
+const fetchDashboardData = async (from = null, to = null) => {
+  loading.value = true;
   try {
-    await authStore.loginWithGoogle()
-    router.push('/dashboard')
-  } catch (error) {
-    console.error('로그인 실패:', error)
+    // 백엔드 API 호출 (날짜 파라미터 전달)
+    const data = await api.getDashboard(props.movieCd, from, to);
+    dashboardData.value = data;
+    
+    // 처음 로딩 시에만 백엔드가 내려준 기간으로 input 값을 세팅
+    if (!from && !to && data.boxoffice.length > 0) {
+      dateFrom.value = data.boxoffice[0].target_date;
+      dateTo.value = data.boxoffice[data.boxoffice.length - 1].target_date;
+    }
+  } catch (e) {
+    console.error(e);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
+
+// 기간 적용 버튼 클릭 시
+const applyDateRange = () => {
+  if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
+    alert('시작일은 종료일보다 빠를 수 없습니다.');
+    return;
+  }
+  fetchDashboardData(dateFrom.value, dateTo.value);
+};
+
+// ─── 데이터 가공 (Computed) - 기존 로직 유지하되 스타일링 옵션만 강화 ──────
+
+// (sortedBoxoffice, latestData, prevData, seatSalesDod 로직 동일)
+const sortedBoxoffice = computed(() => 
+  dashboardData.value?.boxoffice.slice().sort((a, b) => new Date(a.target_date) - new Date(b.target_date)) || []
+);
+const reversedBoxoffice = computed(() => {
+  return [...sortedBoxoffice.value].reverse();
+});
+const recent7DaysBoxoffice = computed(() => {
+  return reversedBoxoffice.value.slice(0, 7);
+});
+const latestData = computed(() => sortedBoxoffice.value[sortedBoxoffice.value.length - 1] || {});
+const prevData = computed(() => sortedBoxoffice.value[sortedBoxoffice.value.length - 2] || {});
+const seatSalesDod = computed(() => {
+  if (!prevData.value.seat_sales_rate) return 0;
+  return Number(latestData.value.seat_sales_rate) - Number(prevData.value.seat_sales_rate);
+});
+
+// 차트 1: 누적 vs 일일 관객 (혼합)
+const trendChartData = computed(() => ({
+  labels: sortedBoxoffice.value.map(d => d.target_date),
+  datasets: [
+    { type: 'line', label: '누적 관객수', data: sortedBoxoffice.value.map(d => d.acc_audi_cnt), borderColor: '#f59e0b', yAxisID: 'y1', tension: 0.1, pointRadius: 2 }, // 점 크기 줄임 (줌 했을 때 보기 좋게)
+    { type: 'bar', label: '일일 관객수', data: sortedBoxoffice.value.map(d => d.audi_cnt), backgroundColor: 'rgba(59, 130, 246, 0.7)', yAxisID: 'y', barPercentage: 0.8 }
+  ]
+}));
+const trendChartOptions = {
+  // (Scales 옵션 동일)
+  responsive: true, maintainAspectRatio: false,
+  scales: {
+    y: { type: 'linear', position: 'left', title: { display: true, text: '일일 관객' } },
+    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '누적 관객' } }
+  }
+};
+
+// 차트 2: 상영점유율 vs 좌석판매율 (Line)
+const efficiencyChartData = computed(() => ({
+  labels: sortedBoxoffice.value.map(d => d.target_date),
+  datasets: [
+    { label: '상영 점유율 (%)', data: sortedBoxoffice.value.map(d => d.show_share), borderColor: '#8b5cf6', tension: 0.1, yAxisID: 'y', pointRadius: 2 },
+    { label: '좌석 판매율 (%)', data: sortedBoxoffice.value.map(d => d.seat_sales_rate), borderColor: '#ef4444', tension: 0.1, yAxisID: 'y', pointRadius: 2 }
+  ]
+}));
+const efficiencyChartOptions = {
+  responsive: true, maintainAspectRatio: false,
+  interaction: { mode: 'index', intersect: false },
+  scales: { y: { type: 'linear', position: 'left', title: { display: true, text: '비율 (%)' }, min: 0, max: 100 } } // 비율이므로 0~100 고정
+};
+
+// 차트 3: 요일별 평균 (Bar)
+const dowChartData = computed(() => {
+  // (요일 집계 로직 동일)
+  const sums = [0, 0, 0, 0, 0, 0, 0]; const counts = [0, 0, 0, 0, 0, 0, 0];
+  sortedBoxoffice.value.forEach(d => {
+    const dayIdx = new Date(d.target_date).getDay(); sums[dayIdx] += d.audi_cnt || 0; counts[dayIdx] += 1;
+  });
+  const averages = sums.map((sum, idx) => counts[idx] ? Math.round(sum / counts[idx]) : 0);
+  return {
+    labels: ['월', '화', '수', '목', '금', '토', '일'],
+    datasets: [{
+      label: '요일별 평균 관객수',
+      data: [averages[1], averages[2], averages[3], averages[4], averages[5], averages[6], averages[0]],
+      backgroundColor: ['#e5e7eb', '#e5e7eb', '#e5e7eb', '#e5e7eb', '#bfdbfe', '#fecdd3', '#fecdd3'], // 색상 좀 더 부드럽게 gray-200, blue-200, rose-200
+      borderRadius: 8
+    }]
+  };
+});
+const dowChartOptions = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { 
+    legend: { display: false },
+    // 이 차트는 데이터가 7개뿐이므로 줌 기능 끔
+    zoom: { zoom: { wheel: { enabled: false }, pinch: { enabled: false } }, pan: { enabled: false } }
+  },
+  scales: { x: { grid: { display: false } } }
+};
+
+// ─── 초기 호출 ─────────────────────────────────────────────────────────
+onMounted(() => {
+  fetchDashboardData(); // 기간 없이 초기 로딩
+});
+</script>
+
+```
+
+```
+./src/views/HomeView.vue
+
+<template>
+  <div class="flex flex-col items-center justify-center min-h-[calc(100vh-100px)] px-4">
+    
+    <div class="text-center mb-12">
+      <h1 class="text-4xl md:text-6xl font-black text-gray-900 mb-4 tracking-tight">
+        영화 데이터 분석의 <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">모든 것</span>
+      </h1>
+      <p class="text-lg md:text-xl text-gray-500 max-w-2xl mx-auto">
+        박스오피스 성적부터 출연진, 날짜별 관객수 추이까지. <br class="hidden md:block" />
+        궁금한 영화 제목을 검색하고 상세한 인사이트를 확인해 보세요.
+      </p>
+    </div>
+
+    <div class="w-full flex justify-center">
+      <MovieSearch />
+    </div>
+
+    <div class="mt-16 flex gap-4 text-sm font-medium text-gray-400">
+      <span class="flex items-center gap-1">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+        KOBIS 기반
+      </span>
+      <span class="flex items-center gap-1">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>
+        TMDB 메타데이터
+      </span>
+    </div>
+
+  </div>
+</template>
+
+<script setup>
+// 작성해둔 MovieSearch 컴포넌트를 불러옵니다.
+import MovieSearch from '../components/MovieSearch.vue';
 </script>
 ```
 
 ```
-./src/views/DashboardView.vue
-
-
-```
-
-```
-./src/assets/css/main.css
+./src/assets/main.css
 
 @import "tailwindcss";
 ```
@@ -201,48 +884,29 @@ const loginWithGoogle = async () => {
 ./src/router/index.js
 
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
-// Router 설정
+import HomeView from '../views/HomeView.vue'
+import DashboardView from '../views/DashboardView.vue'
+
 const routes = [
   {
-    path: '/login',
-    name: 'Login',
-    component: () => import('@/views/LoginView.vue'),
-    meta: { requiresGuest: true },
-  },
-  {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('@/views/DashboardView.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
     path: '/',
-    redirect: '/login',
+    name: 'Home',
+    component: HomeView,
   },
+  {
+    // :movieCd는 동적 파라미터로, 특정 영화의 고유 코드를 URL로 받음
+    // 예: /dashboard/20240001
+    path: '/dashboard/:movieCd',
+    name: 'Dashboard',
+    component: DashboardView,
+    props: true,
+  }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-})
-
-// 네비게이션 가드
-router.beforeEach((to, from, next) => {
-  // 사용자 로그인 상태 정보 확인
-  const authStore = useAuthStore()
-
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    // 1. 로그인 필요한 페이지인데 -> 로그인 안 한 상태 -> 로그인 페이지로 이동
-    next('/login')
-  } else if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    // 2. 비로그인 페이지인데 -> 로그인 한 상태 -> 대시보드로 이동
-    next('/dashboard')
-  } else {
-    // 3. 그 외 -> 정상 이동
-    next()
-  }
 })
 
 export default router
