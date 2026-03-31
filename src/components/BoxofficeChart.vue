@@ -12,7 +12,7 @@
 </template>
 
 <script setup>
-import { computed, defineProps } from 'vue';
+import { computed } from 'vue';
 import { Line } from 'vue-chartjs';
 // Chart.js 핵심 모듈 등록 (필수)
 import {

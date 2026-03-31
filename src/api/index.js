@@ -72,5 +72,34 @@ export const api = {
     }
     
     return res.json();
+  },
+  
+  /**
+   * 특정 세션의 과거 대화 내역 조회
+   * @param {string} sessionId - 조회할 세션의 고유 ID
+   * @returns {Promise<Array>} - 해당 세션의 메시지 배열 (역할과 내용 포함)
+   */
+  async getChatMessages(sessionId) {
+    const res = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`);
+    if (!res.ok) throw new Error('대화 내역을 불러오는데 실패했습니다.');
+    return res.json();
+  },
+
+  /**
+   * 메시지 전송 및 AI 응답 받기
+   * @param {string} sessionId - 메시지를 보낼 세션의 고유 ID
+   * @param {string} message - 사용자 메시지 내용
+   * @returns {Promise<Object>} - AI의 응답 메시지 (역할과 내용 포함)
+   */
+  async sendChatMessage(sessionId, message) {
+    const res = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ message })
+    });
+    if (!res.ok) throw new Error('메시지 전송에 실패했습니다.');
+    return res.json();
   }
 };

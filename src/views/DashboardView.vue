@@ -1,6 +1,6 @@
 <template>
   <div v-if="loading && !dashboardData" class="flex justify-center py-20 text-blue-500 animate-pulse font-bold">
-    마케팅 인사이트를 분석 중입니다...
+    마케팅 인사이트를 분석 중입니다... 🍿
   </div>
 
   <div v-else-if="dashboardData" class="max-w-7xl mx-auto p-6 pb-20 bg-gray-50 min-h-screen">
@@ -42,53 +42,6 @@
       </div>
     </div>
 
-    <div v-if="latestData && latestData.target_date" class="mb-8">
-      <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-        📊 최신 박스오피스 요약
-        <span class="text-sm font-medium text-gray-500 bg-gray-200 px-2 py-1 rounded-md">기준일: {{ latestData.target_date }}</span>
-      </h2>
-      
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">박스오피스 순위</span>
-          <span class="text-3xl font-black text-gray-900">{{ latestData.rank_num }}<span class="text-lg font-bold text-gray-500">위</span></span>
-        </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">일일 관객수</span>
-          <div>
-            <span class="text-3xl font-black text-blue-600">{{ (latestData.audi_cnt || 0).toLocaleString() }}</span>
-            <span class="text-sm font-bold ml-1" :class="latestData.audi_change_dod > 0 ? 'text-red-500' : 'text-blue-500'">
-              ({{ latestData.audi_change_dod > 0 ? '+' : '' }}{{ (latestData.audi_change_dod || 0).toLocaleString() }})
-            </span>
-          </div>
-        </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">일일 매출액</span>
-          <span class="text-3xl font-black text-gray-900">{{ (latestData.sales_amt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">원</span></span>
-        </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">누적 관객수</span>
-          <span class="text-3xl font-black text-indigo-600">{{ (latestData.acc_audi_cnt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">명</span></span>
-        </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">상영 점유율</span>
-          <span class="text-3xl font-black text-purple-600">{{ latestData.show_share || 0 }}<span class="text-lg font-bold text-gray-500">%</span></span>
-        </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">좌석 판매율</span>
-          <span class="text-3xl font-black text-rose-500">{{ latestData.seat_sales_rate || 0 }}<span class="text-lg font-bold text-gray-500">%</span></span>
-        </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">스크린수</span>
-          <span class="text-3xl font-black text-gray-900">{{ (latestData.screen_cnt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">개</span></span>
-        </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-          <span class="text-sm text-gray-500 font-bold mb-1">상영횟수</span>
-          <span class="text-3xl font-black text-gray-900">{{ (latestData.show_cnt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">회</span></span>
-        </div>
-      </div>
-    </div>
-
     <div class="sticky top-4 z-30 bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-sm mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-gray-200">
       <h2 class="text-lg font-bold flex items-center gap-2 text-gray-800">
         <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -108,96 +61,60 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-12">
-      <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50">
-        <div>
-          <h3 class="text-xl font-bold text-gray-950">일자별 상세 데이터</h3>
-          <p class="text-sm text-gray-500 mt-1">최근 7일치 데이터만 표시됩니다.</p>
-        </div>
-        
-        <a 
-          :href="`https://kobis.or.kr/kobis/business/main/main.do`" 
-          target="_blank" 
-          class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-sm font-bold transition-colors"
-        >
-          전체 데이터 보기 (KOBIS)
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-        </a>
-      </div>
-      
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm text-right text-gray-600 whitespace-nowrap">
-          <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b border-gray-200">
-            <tr>
-              <th scope="col" class="px-4 py-3 text-center sticky left-0 bg-gray-100 z-10 border-r">날짜</th>
-              <th scope="col" class="px-4 py-3 text-center">순위</th>
-              <th scope="col" class="px-4 py-3">관객수<br/><span class="text-[10px] text-gray-400 font-normal">(전일비)</span></th>
-              <th scope="col" class="px-4 py-3">매출액<br/><span class="text-[10px] text-gray-400 font-normal">(전일비)</span></th>
-              <th scope="col" class="px-4 py-3">상영점유율</th>
-              <th scope="col" class="px-4 py-3">좌석판매율</th>
-              <th scope="col" class="px-4 py-3">스크린수<br/><span class="text-[10px] text-gray-400 font-normal">(점유율)</span></th>
-              <th scope="col" class="px-4 py-3">상영횟수</th>
-              <th scope="col" class="px-4 py-3">누적 관객수</th>
-              <th scope="col" class="px-4 py-3">누적 매출액</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in recent7DaysBoxoffice" :key="row.target_date" class="bg-white border-b hover:bg-gray-50 transition">
-              <td class="px-4 py-3 text-center font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">{{ row.target_date }}</td>
-              <td class="px-4 py-3 text-center font-bold">{{ row.rank_num }}위</td>
-              
-              <td class="px-4 py-3">
-                <span class="font-bold text-gray-900">{{ (row.audi_cnt || 0).toLocaleString() }}</span>
-                <span class="ml-1 text-xs" :class="row.audi_change_dod > 0 ? 'text-red-500' : 'text-blue-500'">
-                  ({{ row.audi_change_dod > 0 ? '+' : '' }}{{ (row.audi_change_dod || 0).toLocaleString() }})
-                </span>
-              </td>
-              
-              <td class="px-4 py-3">
-                <span class="font-bold text-gray-900">{{ (row.sales_amt || 0).toLocaleString() }}</span>
-                <span class="ml-1 text-xs" :class="row.sales_change_dod > 0 ? 'text-red-500' : 'text-blue-500'">
-                  ({{ row.sales_change_dod > 0 ? '+' : '' }}{{ (row.sales_change_dod || 0).toLocaleString() }})
-                </span>
-              </td>
-              
-              <td class="px-4 py-3 font-bold text-purple-600">{{ row.show_share || 0 }}%</td>
-              <td class="px-4 py-3 font-bold text-rose-500">{{ row.seat_sales_rate || 0 }}%</td>
-              
-              <td class="px-4 py-3">
-                {{ (row.screen_cnt || 0).toLocaleString() }}개
-                <span class="text-xs text-gray-400 ml-1">({{ row.screen_share || 0 }}%)</span>
-              </td>
-              
-              <td class="px-4 py-3">{{ (row.show_cnt || 0).toLocaleString() }}회</td>
-              <td class="px-4 py-3 text-blue-600 font-bold">{{ (row.acc_audi_cnt || 0).toLocaleString() }}</td>
-              <td class="px-4 py-3 text-green-600 font-bold">{{ (row.acc_sales_amt || 0).toLocaleString() }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
     <div class="space-y-8">
       
-      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div class="flex items-center justify-between mb-5">
-          <h3 class="text-xl font-bold text-gray-950">흥행 추이 (누적 vs 일일 관객)</h3>
-          <div class="text-xs text-gray-400 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M.133 11.118l2.897.777M3.088 2.228l1.102-.635m8.045 7.906l.635 1.102m3.949-8.045l-.635 1.102m.747 9.876l9.876.747"></path></svg>
-            그래프를 마우스 휠로 확대/축소, 드래그로 이동해 보세요.
-          </div>
+      <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xl font-bold text-gray-950">흥행 모멘텀 분석 (일일 vs 누적 관객)</h3>
         </div>
-        <MarketingCharts type="mixed" :chartData="trendChartData" :chartOptions="trendChartOptions" />
+        <p class="text-sm text-gray-500 mb-6">하단 스크롤바를 조절하여 특정 구간의 화제성을 줌인(Zoom-in) 해보세요.</p>
+        <div class="w-full h-[400px]">
+          <v-chart class="chart" :option="trendChartOption" autoresize />
+        </div>
       </div>
 
-      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <h3 class="text-xl font-bold mb-5 text-gray-950">스크린 효율성 분석 (상영점유율 vs 좌석판매율)</h3>
-        <MarketingCharts type="line" :chartData="efficiencyChartData" :chartOptions="efficiencyChartOptions" />
+      <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xl font-bold text-gray-950">스크린 마케팅 효율성 (상영점유율 vs 좌석판매율)</h3>
+        </div>
+        <p class="text-sm text-gray-500 mb-6">
+          <span class="font-bold text-blue-600">상영점유율</span>이 높은데 <span class="font-bold text-red-500">좌석판매율</span>이 낮다면 스크린 과잉 확보 상태입니다.
+        </p>
+        <div class="w-full h-[350px]">
+          <v-chart class="chart" :option="efficiencyChartOption" autoresize />
+        </div>
       </div>
 
-      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <h3 class="text-xl font-bold mb-5 text-gray-950">요일별 관람 패턴 (타겟팅 분석)</h3>
-        <MarketingCharts type="bar" :chartData="dowChartData" :chartOptions="dowChartOptions" />
+      <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xl font-bold text-gray-950">프리미엄 포맷 파워 (평균 객단가 추이)</h3>
+        </div>
+        <p class="text-sm text-gray-500 mb-6">특정일에 객단가가 상승한다면 <b>IMAX, 4DX 등 특수관 매니아층</b>의 N차 관람이 주도하고 있다는 신호입니다.</p>
+        <div class="w-full h-[350px]">
+          <v-chart class="chart" :option="arpuChartOption" autoresize />
+        </div>
+      </div>
+
+      <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xl font-bold text-gray-950">극장 편성 방어력 (스크린당 상영횟수)</h3>
+        </div>
+        <p class="text-sm text-gray-500 mb-6">
+          수치가 <span class="text-red-500 font-bold">3.0 미만</span>으로 떨어지면 극장이 메인 시간대를 뺏고 <b>'교차 상영(조조/심야 배치)'</b>을 시작했다는 의미입니다.
+        </p>
+        <div class="w-full h-[300px]">
+          <v-chart class="chart" :option="crossScreeningChartOption" autoresize />
+        </div>
+      </div>
+
+      <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xl font-bold text-gray-950">요일별 관람 패턴 (프로모션 타겟팅)</h3>
+        </div>
+        <p class="text-sm text-gray-500 mb-6">평균 관객이 몰리는 요일을 파악하여 무대인사나 이벤트를 집중 배치하세요.</p>
+        <div class="w-full h-[300px]">
+          <v-chart class="chart" :option="dowChartOption" autoresize />
+        </div>
       </div>
 
     </div>
@@ -207,7 +124,21 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { api } from '../api';
-import MarketingCharts from '../components/MarketingCharts.vue';
+
+// --- ECharts 모듈 임포트 ---
+import { use } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { BarChart, LineChart } from 'echarts/charts';
+import {
+  TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent
+} from 'echarts/components';
+import VChart from 'vue-echarts';
+
+use([
+  CanvasRenderer, BarChart, LineChart,
+  TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent
+]);
+// -----------------------------
 
 const props = defineProps({ movieCd: String });
 const dashboardData = ref(null);
@@ -241,74 +172,183 @@ const applyDateRange = () => {
   fetchDashboardData(dateFrom.value, dateTo.value);
 };
 
+// 날짜순 정렬된 데이터
 const sortedBoxoffice = computed(() => 
   dashboardData.value?.boxoffice.slice().sort((a, b) => new Date(a.target_date) - new Date(b.target_date)) || []
 );
-const reversedBoxoffice = computed(() => {
-  return [...sortedBoxoffice.value].reverse();
-});
-// ✨ 템플릿의 테이블에서 이 값을 사용하여 최근 7일치만 렌더링하도록 변경됨
-const recent7DaysBoxoffice = computed(() => {
-  return reversedBoxoffice.value.slice(0, 7);
-});
 
-// ✨ 가장 최근(전일자) 데이터
-const latestData = computed(() => sortedBoxoffice.value[sortedBoxoffice.value.length - 1] || {});
+// 📊 1. 흥행 추이 차트 옵션 (막대 + 꺾은선 + 줌)
+const trendChartOption = computed(() => {
+  const dates = sortedBoxoffice.value.map(d => d.target_date);
+  const dailyAudi = sortedBoxoffice.value.map(d => d.audi_cnt);
+  const accAudi = sortedBoxoffice.value.map(d => d.acc_audi_cnt);
 
-const trendChartData = computed(() => ({
-  labels: sortedBoxoffice.value.map(d => d.target_date),
-  datasets: [
-    { type: 'line', label: '누적 관객수', data: sortedBoxoffice.value.map(d => d.acc_audi_cnt), borderColor: '#f59e0b', yAxisID: 'y1', tension: 0.1, pointRadius: 2 },
-    { type: 'bar', label: '일일 관객수', data: sortedBoxoffice.value.map(d => d.audi_cnt), backgroundColor: 'rgba(59, 130, 246, 0.7)', yAxisID: 'y', barPercentage: 0.8 }
-  ]
-}));
-const trendChartOptions = {
-  responsive: true, maintainAspectRatio: false,
-  scales: {
-    y: { type: 'linear', position: 'left', title: { display: true, text: '일일 관객' } },
-    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '누적 관객' } }
-  }
-};
-
-const efficiencyChartData = computed(() => ({
-  labels: sortedBoxoffice.value.map(d => d.target_date),
-  datasets: [
-    { label: '상영 점유율 (%)', data: sortedBoxoffice.value.map(d => d.show_share), borderColor: '#8b5cf6', tension: 0.1, yAxisID: 'y', pointRadius: 2 },
-    { label: '좌석 판매율 (%)', data: sortedBoxoffice.value.map(d => d.seat_sales_rate), borderColor: '#ef4444', tension: 0.1, yAxisID: 'y', pointRadius: 2 }
-  ]
-}));
-const efficiencyChartOptions = {
-  responsive: true, maintainAspectRatio: false,
-  interaction: { mode: 'index', intersect: false },
-  scales: { y: { type: 'linear', position: 'left', title: { display: true, text: '비율 (%)' }, min: 0, max: 100 } }
-};
-
-const dowChartData = computed(() => {
-  const sums = [0, 0, 0, 0, 0, 0, 0]; const counts = [0, 0, 0, 0, 0, 0, 0];
-  sortedBoxoffice.value.forEach(d => {
-    const dayIdx = new Date(d.target_date).getDay(); sums[dayIdx] += d.audi_cnt || 0; counts[dayIdx] += 1;
-  });
-  const averages = sums.map((sum, idx) => counts[idx] ? Math.round(sum / counts[idx]) : 0);
   return {
-    labels: ['월', '화', '수', '목', '금', '토', '일'],
-    datasets: [{
-      label: '요일별 평균 관객수',
-      data: [averages[1], averages[2], averages[3], averages[4], averages[5], averages[6], averages[0]],
-      backgroundColor: ['#e5e7eb', '#e5e7eb', '#e5e7eb', '#e5e7eb', '#bfdbfe', '#fecdd3', '#fecdd3'],
-      borderRadius: 8
-    }]
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    legend: { data: ['일일 관객수', '누적 관객수'], bottom: 0 },
+    grid: { left: '3%', right: '3%', bottom: '15%', containLabel: true },
+    xAxis: { type: 'category', data: dates },
+    yAxis: [
+      { 
+        type: 'value', name: '일일 관객 (명)', 
+        axisLabel: { formatter: (val) => (val / 10000).toFixed(0) + '만' } 
+      },
+      { 
+        type: 'value', name: '누적 관객 (명)', 
+        alignTicks: true,
+        axisLabel: { formatter: (val) => (val / 10000).toFixed(0) + '만' } 
+      }
+    ],
+    // 💡 주식 차트 같은 미니맵 스크롤바
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', bottom: 25, height: 20, borderColor: 'transparent', backgroundColor: '#f3f4f6' }
+    ],
+    series: [
+      { name: '일일 관객수', type: 'bar', data: dailyAudi, itemStyle: { color: '#60a5fa', borderRadius: [4, 4, 0, 0] } },
+      { name: '누적 관객수', type: 'line', yAxisIndex: 1, data: accAudi, smooth: true, itemStyle: { color: '#f59e0b' }, lineStyle: { width: 3 } }
+    ]
   };
 });
-const dowChartOptions = {
-  responsive: true, maintainAspectRatio: false,
-  plugins: { 
-    legend: { display: false },
-    zoom: { zoom: { wheel: { enabled: false }, pinch: { enabled: false } }, pan: { enabled: false } }
-  },
-  scales: { x: { grid: { display: false } } }
-};
+
+// 📊 2. 스크린 마케팅 효율성 차트 (면적 그래프)
+const efficiencyChartOption = computed(() => {
+  const dates = sortedBoxoffice.value.map(d => d.target_date);
+  const showShare = sortedBoxoffice.value.map(d => d.show_share);
+  const seatSalesRate = sortedBoxoffice.value.map(d => d.seat_sales_rate);
+
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'line' } },
+    legend: { data: ['상영 점유율 (%)', '좌석 판매율 (%)'], top: 0 },
+    grid: { left: '3%', right: '4%', bottom: '5%', containLabel: true },
+    xAxis: { type: 'category', boundaryGap: false, data: dates },
+    yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value} %' } },
+    series: [
+      { 
+        name: '상영 점유율 (%)', type: 'line', data: showShare, smooth: true,
+        itemStyle: { color: '#3b82f6' },
+        areaStyle: { color: 'rgba(59, 130, 246, 0.1)' } 
+      },
+      { 
+        name: '좌석 판매율 (%)', type: 'line', data: seatSalesRate, smooth: true,
+        itemStyle: { color: '#ef4444' },
+        areaStyle: { color: 'rgba(239, 68, 68, 0.1)' } 
+      }
+    ]
+  };
+});
+
+// 📊 3. 요일별 타겟팅 차트
+const dowChartOption = computed(() => {
+  const sums = [0, 0, 0, 0, 0, 0, 0]; 
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  sortedBoxoffice.value.forEach(d => {
+    const dayIdx = new Date(d.target_date).getDay(); 
+    sums[dayIdx] += d.audi_cnt || 0; 
+    counts[dayIdx] += 1;
+  });
+  const averages = sums.map((sum, idx) => counts[idx] ? Math.round(sum / counts[idx]) : 0);
+  
+  // 월화수목금토일 순서 맞추기
+  const alignedAverages = [averages[1], averages[2], averages[3], averages[4], averages[5], averages[6], averages[0]];
+
+  return {
+    tooltip: { trigger: 'axis', formatter: '{b}요일 평균: {c}명' },
+    grid: { left: '3%', right: '4%', bottom: '5%', top: '10%', containLabel: true },
+    xAxis: { type: 'category', data: ['월', '화', '수', '목', '금', '토', '일'], axisTick: { show: false } },
+    yAxis: { type: 'value', axisLabel: { formatter: (val) => (val / 10000).toFixed(0) + '만' } },
+    series: [
+      {
+        type: 'bar',
+        data: alignedAverages.map((val, idx) => ({
+          value: val,
+          // 주말(토, 일)은 붉은색 계열, 평일은 푸른색 계열로 시각적 분리
+          itemStyle: { color: idx >= 5 ? '#f87171' : '#93c5fd', borderRadius: [6, 6, 0, 0] }
+        })),
+        barWidth: '40%'
+      }
+    ]
+  };
+});
+
+// 📊 4. 관객 1인당 평균 결제 금액 (객단가 - ARPU) 차트
+const arpuChartOption = computed(() => {
+  const dates = sortedBoxoffice.value.map(d => d.target_date);
+  // 매출액 / 관객수 = 객단가
+  const arpu = sortedBoxoffice.value.map(d => d.audi_cnt > 0 ? Math.round(d.sales_amt / d.audi_cnt) : 0);
+
+  return {
+    tooltip: { trigger: 'axis', formatter: '{b}<br/>평균 객단가: <b>{c}원</b>' },
+    grid: { left: '4%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+    xAxis: { type: 'category', data: dates },
+    yAxis: { 
+      type: 'value', 
+      min: (value) => Math.max(0, value.min - 1000), // 변동성을 잘 보이게 Y축 최소값 자동 조절
+      axisLabel: { formatter: '{value}원' } 
+    },
+    dataZoom: [{ type: 'inside' }, { type: 'slider', bottom: 0, height: 20 }],
+    series: [
+      {
+        name: '객단가',
+        type: 'line',
+        data: arpu,
+        smooth: true,
+        symbolSize: 8,
+        itemStyle: { color: '#8b5cf6' }, // 보라색
+        lineStyle: { width: 3 },
+        areaStyle: {
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{ offset: 0, color: 'rgba(139, 92, 246, 0.4)' }, { offset: 1, color: 'rgba(139, 92, 246, 0.0)' }]
+          }
+        }
+      }
+    ]
+  };
+});
+
+// 📊 5. 극장 편성 퀄리티 (스크린당 상영 횟수 - 교차상영 지수)
+const crossScreeningChartOption = computed(() => {
+  const dates = sortedBoxoffice.value.map(d => d.target_date);
+  // 상영횟수 / 스크린수 = 스크린 1개당 평균 상영 횟수
+  const showsPerScreen = sortedBoxoffice.value.map(d => 
+    d.screen_cnt > 0 ? (d.show_cnt / d.screen_cnt).toFixed(2) : 0
+  );
+
+  return {
+    tooltip: { trigger: 'axis', formatter: '{b}<br/>스크린당 상영: <b>{c}회</b>' },
+    grid: { left: '3%', right: '4%', bottom: '10%', top: '10%', containLabel: true },
+    xAxis: { type: 'category', data: dates },
+    yAxis: { type: 'value', name: '상영 횟수', splitLine: { lineStyle: { type: 'dashed' } } },
+    // 시각적 기준선 (MarkLine): 3.0 이하로 떨어지면 위험 신호
+    series: [
+      {
+        name: '평균 상영횟수',
+        type: 'bar',
+        data: showsPerScreen,
+        itemStyle: {
+          // 3회 미만이면 빨간색(경고), 이상이면 청록색(정상)
+          color: (params) => params.value < 3.0 ? '#ef4444' : '#14b8a6',
+          borderRadius: [4, 4, 0, 0]
+        },
+        markLine: {
+          silent: true,
+          lineStyle: { color: '#ef4444', type: 'dashed' },
+          data: [{ yAxis: 3.0, name: '교차상영 경고선' }]
+        }
+      }
+    ]
+  };
+});
 
 onMounted(() => {
   fetchDashboardData(); 
 });
 </script>
+
+<style scoped>
+.chart {
+  width: 100%;
+  height: 100%;
+}
+</style>

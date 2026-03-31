@@ -2,7 +2,7 @@
 output_file="output.txt" > "$output_file"
 
 # 제외할 폴더 리스트 (경로 앞뒤에 * 가능)
-EXCLUDED_DIRS=( "*/node_modules/*" "*/volume/*" "*/__pycache__/*" "*/venv/*" "*/volumes/*" "*/db_data/*" "*/.gradle/*" "*/build/*" "*/gradle/*" "*/.idea/*" "*/_docs/*" "*/.vscode/*" "*/.git/*" "*/docs/*" "*/venv/*" "*/templates/*")
+EXCLUDED_DIRS=( "*/backend/*" "*/node_modules/*" "*/volume/*" "*/__pycache__/*" "*/venv/*" "*/volumes/*" "*/db_data/*" "*/.gradle/*" "*/build/*" "*/gradle/*" "*/.idea/*" "*/_docs/*" "*/.vscode/*" "*/.git/*" "*/docs/*" "*/venv/*" "*/templates/*")
 # 제외할 확장자 리스트 (대소문자 구분 없이 제외)
 EXCLUDED_EXTS=("ico" "env" "png" "jpg" "sh" "md" "txt" "html" "json" "log")
 # 제외할 파일 이름 (정확한 이름 일치)

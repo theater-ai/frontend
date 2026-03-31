@@ -14,7 +14,7 @@
 </template>
 
 <script setup>
-import { ref, computed, defineProps } from 'vue';
+import { ref, computed } from 'vue';
 import { Bar, Line } from 'vue-chartjs';
 import {
   Chart as ChartJS, Title, Tooltip, Legend, LineElement, PointElement,

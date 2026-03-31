@@ -6,6 +6,144 @@
         @input="handleInput"
         @focus="showSuggestions = true"
         type="text" 
+        placeholder="비교할 영화를 검색해 담아보세요! (최대 5개)"
+        class="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-full shadow-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white"
+        :disabled="isLoading"
+      />
+      <div class="absolute inset-y-0 right-6 flex items-center pointer-events-none">
+        <svg v-if="!isLoading" class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+        <svg v-else class="w-6 h-6 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    </div>
+    
+    <ul v-if="showSuggestions && suggestions.length > 0 && !isLoading" class="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl max-h-80 overflow-y-auto">
+      <li 
+        v-for="movie in suggestions" 
+        :key="movie.movie_cd"
+        @click="selectMovie(movie)"
+        class="px-6 py-3 cursor-pointer hover:bg-blue-50 transition-colors border-b last:border-0 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1"
+      >
+        <span class="font-bold text-gray-800 text-lg">{{ movie.movie_nm }}</span>
+        <span class="text-sm text-gray-500">{{ movie.open_dt ? movie.open_dt.substring(0, 4) : '미개봉' }} | {{ movie.director }}</span>
+      </li>
+    </ul>
+
+    <div v-if="errorMsg" class="mt-4 px-4 py-3 bg-red-50 text-red-600 rounded-lg text-center">
+      {{ errorMsg }}
+    </div>
+
+    <div v-if="compareStore.selectedMovies.length > 0" class="mt-6 p-5 bg-white rounded-2xl shadow-sm border border-gray-100">
+      <h3 class="text-sm font-bold text-gray-500 mb-3">현재 담긴 영화 ({{ compareStore.selectedMovies.length }}/5)</h3>
+      <div class="flex flex-wrap gap-2 mb-4">
+        <div 
+          v-for="movie in compareStore.selectedMovies" 
+          :key="movie.movieCd"
+          class="px-4 py-2 bg-blue-50 text-blue-700 font-bold rounded-full flex items-center gap-2"
+        >
+          {{ movie.movieNm }}
+          <button @click="compareStore.removeMovie(movie.movieCd)" class="text-blue-400 hover:text-red-500 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </div>
+      
+      <div class="flex gap-2">
+        <button 
+          @click="goToCompare"
+          class="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition shadow-md"
+        >
+          📈 개봉일 기준 흥행 추이 비교하기
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '../api';
+import { useCompareStore } from '../stores/compare'; // 👇 Store 가져오기
+
+const router = useRouter();
+const compareStore = useCompareStore(); // 👇 Store 인스턴스
+const searchQuery = ref('');
+const suggestions = ref([]);
+const showSuggestions = ref(false);
+const isLoading = ref(false);
+const errorMsg = ref('');
+
+let debounceTimeout = null;
+
+const handleInput = () => {
+  errorMsg.value = '';
+  if (debounceTimeout) clearTimeout(debounceTimeout);
+  if (searchQuery.value.trim().length < 2) {
+    suggestions.value = [];
+    return;
+  }
+  debounceTimeout = setTimeout(async () => {
+    try {
+      const data = await api.suggest(searchQuery.value);
+      suggestions.value = data.suggestions || [];
+      showSuggestions.value = true;
+    } catch (err) {
+      console.error(err);
+    }
+  }, 300);
+};
+
+const selectMovie = async (movie) => {
+  showSuggestions.value = false;
+  isLoading.value = true;
+  errorMsg.value = '';
+  
+  try {
+    const searchResult = await api.search(movie.movie_nm);
+    const existingMovie = searchResult.results.find(m => m.movie_nm === movie.movie_nm);
+    let targetMovieCd = '';
+
+    if (existingMovie) {
+      targetMovieCd = existingMovie.movie_cd;
+    } else {
+      const scrapeResult = await api.scrape(movie.movie_nm);
+      targetMovieCd = scrapeResult.movie_cd;
+    }
+    
+    // 👇 라우터 이동 대신 Store에 영화 추가
+    compareStore.addMovie({
+      movieCd: targetMovieCd,
+      movieNm: movie.movie_nm
+    });
+    searchQuery.value = ''; // 검색창 초기화
+    
+  } catch (error) {
+    errorMsg.value = error.message || '데이터를 가져오는 데 실패했습니다.';
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// 👇 비교 페이지로 이동하는 함수
+const goToCompare = () => {
+  router.push('/compare');
+};
+</script>
+
+
+<!-- <template>
+  <div class="relative w-full max-w-2xl mx-auto">
+    <div class="relative">
+      <input 
+        v-model="searchQuery" 
+        @input="handleInput"
+        @focus="showSuggestions = true"
+        type="text" 
         placeholder="어떤 영화의 통계가 궁금하신가요? (예: 파묘)"
         class="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-full shadow-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white"
         :disabled="isLoading"
@@ -125,7 +263,4 @@ const selectMovie = async (movie) => {
   }
 };
 </script>
-
-1.분석기간 설정이 불편함. 검은색이라
-2.요일별 관람 패턴에는 줌/스크롤이 필요 없음
-3.현재는 일일 박스오피스, 티켓파워, 스크린확보력 등의 일부 정보만 보여주는데, 박스오피스 csv에서 읽어온 모든 각각의 데이터를 보여주고싶어.
+ -->

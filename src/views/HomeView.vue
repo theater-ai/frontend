@@ -3,7 +3,7 @@
     
     <div class="text-center mb-12">
       <h1 class="text-4xl md:text-6xl font-black text-gray-900 mb-4 tracking-tight">
-        영화 데이터 분석의 <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">모든 것</span>
+        Theater AI
       </h1>
       <p class="text-lg md:text-xl text-gray-500 max-w-2xl mx-auto">
         박스오피스 성적부터 출연진, 날짜별 관객수 추이까지. <br class="hidden md:block" />

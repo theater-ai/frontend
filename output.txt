@@ -103,6 +103,38 @@ export const useAuthStore = defineStore('auth', () => {
 ```
 
 ```
+./src/stores/compare.js
+
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+
+export const useCompareStore = defineStore('compare', () => {
+  const selectedMovies = ref([]) // { movieCd, movieNm } 형태로 저장
+
+  const addMovie = (movie) => {
+    // 중복 추가 방지
+    if (!selectedMovies.value.find(m => m.movieCd === movie.movieCd)) {
+      if (selectedMovies.value.length < 5) { // 최대 5개 제한
+        selectedMovies.value.push(movie)
+      } else {
+        alert('최대 5개까지만 비교할 수 있습니다.')
+      }
+    }
+  }
+
+  const removeMovie = (movieCd) => {
+    selectedMovies.value = selectedMovies.value.filter(m => m.movieCd !== movieCd)
+  }
+
+  const clearMovies = () => {
+    selectedMovies.value = []
+  }
+
+  return { selectedMovies, addMovie, removeMovie, clearMovies }
+})
+```
+
+```
 ./src/main.js
 
 import { createApp } from 'vue'
@@ -124,6 +156,144 @@ app.mount('#app')
 ./src/components/MovieSearch.vue
 
 <template>
+  <div class="relative w-full max-w-2xl mx-auto">
+    <div class="relative">
+      <input 
+        v-model="searchQuery" 
+        @input="handleInput"
+        @focus="showSuggestions = true"
+        type="text" 
+        placeholder="비교할 영화를 검색해 담아보세요! (최대 5개)"
+        class="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-full shadow-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white"
+        :disabled="isLoading"
+      />
+      <div class="absolute inset-y-0 right-6 flex items-center pointer-events-none">
+        <svg v-if="!isLoading" class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+        <svg v-else class="w-6 h-6 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    </div>
+    
+    <ul v-if="showSuggestions && suggestions.length > 0 && !isLoading" class="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl max-h-80 overflow-y-auto">
+      <li 
+        v-for="movie in suggestions" 
+        :key="movie.movie_cd"
+        @click="selectMovie(movie)"
+        class="px-6 py-3 cursor-pointer hover:bg-blue-50 transition-colors border-b last:border-0 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1"
+      >
+        <span class="font-bold text-gray-800 text-lg">{{ movie.movie_nm }}</span>
+        <span class="text-sm text-gray-500">{{ movie.open_dt ? movie.open_dt.substring(0, 4) : '미개봉' }} | {{ movie.director }}</span>
+      </li>
+    </ul>
+
+    <div v-if="errorMsg" class="mt-4 px-4 py-3 bg-red-50 text-red-600 rounded-lg text-center">
+      {{ errorMsg }}
+    </div>
+
+    <div v-if="compareStore.selectedMovies.length > 0" class="mt-6 p-5 bg-white rounded-2xl shadow-sm border border-gray-100">
+      <h3 class="text-sm font-bold text-gray-500 mb-3">현재 담긴 영화 ({{ compareStore.selectedMovies.length }}/5)</h3>
+      <div class="flex flex-wrap gap-2 mb-4">
+        <div 
+          v-for="movie in compareStore.selectedMovies" 
+          :key="movie.movieCd"
+          class="px-4 py-2 bg-blue-50 text-blue-700 font-bold rounded-full flex items-center gap-2"
+        >
+          {{ movie.movieNm }}
+          <button @click="compareStore.removeMovie(movie.movieCd)" class="text-blue-400 hover:text-red-500 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </div>
+      
+      <div class="flex gap-2">
+        <button 
+          @click="goToCompare"
+          class="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition shadow-md"
+        >
+          📈 개봉일 기준 흥행 추이 비교하기
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '../api';
+import { useCompareStore } from '../stores/compare'; // 👇 Store 가져오기
+
+const router = useRouter();
+const compareStore = useCompareStore(); // 👇 Store 인스턴스
+const searchQuery = ref('');
+const suggestions = ref([]);
+const showSuggestions = ref(false);
+const isLoading = ref(false);
+const errorMsg = ref('');
+
+let debounceTimeout = null;
+
+const handleInput = () => {
+  errorMsg.value = '';
+  if (debounceTimeout) clearTimeout(debounceTimeout);
+  if (searchQuery.value.trim().length < 2) {
+    suggestions.value = [];
+    return;
+  }
+  debounceTimeout = setTimeout(async () => {
+    try {
+      const data = await api.suggest(searchQuery.value);
+      suggestions.value = data.suggestions || [];
+      showSuggestions.value = true;
+    } catch (err) {
+      console.error(err);
+    }
+  }, 300);
+};
+
+const selectMovie = async (movie) => {
+  showSuggestions.value = false;
+  isLoading.value = true;
+  errorMsg.value = '';
+  
+  try {
+    const searchResult = await api.search(movie.movie_nm);
+    const existingMovie = searchResult.results.find(m => m.movie_nm === movie.movie_nm);
+    let targetMovieCd = '';
+
+    if (existingMovie) {
+      targetMovieCd = existingMovie.movie_cd;
+    } else {
+      const scrapeResult = await api.scrape(movie.movie_nm);
+      targetMovieCd = scrapeResult.movie_cd;
+    }
+    
+    // 👇 라우터 이동 대신 Store에 영화 추가
+    compareStore.addMovie({
+      movieCd: targetMovieCd,
+      movieNm: movie.movie_nm
+    });
+    searchQuery.value = ''; // 검색창 초기화
+    
+  } catch (error) {
+    errorMsg.value = error.message || '데이터를 가져오는 데 실패했습니다.';
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// 👇 비교 페이지로 이동하는 함수
+const goToCompare = () => {
+  router.push('/compare');
+};
+</script>
+
+
+<!-- <template>
   <div class="relative w-full max-w-2xl mx-auto">
     <div class="relative">
       <input 
@@ -250,6 +420,8 @@ const selectMovie = async (movie) => {
   }
 };
 </script>
+ -->
+
 ```
 
 ```
@@ -548,6 +720,206 @@ export const api = {
 ```
 
 ```
+./src/views/CompareView.vue
+
+<template>
+  <div class="max-w-7xl mx-auto p-6 pb-20 bg-gray-50 min-h-screen">
+    
+    <div class="flex items-center justify-between mb-8">
+      <h1 class="text-3xl md:text-4xl font-extrabold text-gray-950 tracking-tight">
+        📈 박스오피스 흥행 추이 비교
+      </h1>
+      <button @click="router.push('/')" class="px-4 py-2 bg-white border border-gray-200 rounded-lg font-bold text-gray-600 hover:bg-gray-50">
+        ← 돌아가기
+      </button>
+    </div>
+
+    <div v-if="loading" class="flex justify-center py-20 text-blue-500 animate-pulse font-bold text-xl">
+      선택한 영화 데이터를 모두 분석 중입니다... 🍿
+    </div>
+
+    <div v-else-if="compareStore.selectedMovies.length === 0" class="text-center py-20 bg-white rounded-3xl border border-gray-200">
+      <p class="text-gray-500 text-lg mb-4">비교할 영화가 없습니다.</p>
+      <button @click="router.push('/')" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl">영화 검색하러 가기</button>
+    </div>
+
+    <div v-else class="space-y-8">
+      <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <h3 class="text-xl font-bold text-gray-900 mb-2">개봉일 기준 누적 관객수 추이</h3>
+        <p class="text-sm text-gray-500 mb-6">하단 스크롤바를 드래그하거나 휠을 굴려 기간을 조절해보세요.</p>
+        
+        <div class="w-full h-[500px]">
+          <v-chart class="chart" :option="chartOptions" autoresize />
+        </div>
+      </div>
+    </div>
+
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '../api';
+import { useCompareStore } from '../stores/compare';
+
+// --- ECharts 모듈 임포트 ---
+import { use } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { LineChart } from 'echarts/charts';
+import {
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent,
+  DataZoomComponent
+} from 'echarts/components';
+import VChart from 'vue-echarts';
+
+use([
+  CanvasRenderer,
+  LineChart,
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent,
+  DataZoomComponent
+]);
+// -----------------------------
+
+const router = useRouter();
+const compareStore = useCompareStore();
+const loading = ref(true);
+
+const chartOptions = ref({});
+
+const fetchAndProcessData = async () => {
+  if (compareStore.selectedMovies.length === 0) {
+    loading.value = false;
+    return;
+  }
+
+  loading.value = true;
+  try {
+    // 1. 선택된 모든 영화의 API 병렬 호출
+    const promises = compareStore.selectedMovies.map(movie => api.getDashboard(movie.movieCd));
+    const dashboards = await Promise.all(promises);
+
+    let maxDays = 0;
+    const seriesData = [];
+    const legendData = [];
+
+    // 2. 데이터 정규화 (Day 1, Day 2...)
+    dashboards.forEach((db, index) => {
+      const movieNm = compareStore.selectedMovies[index].movieNm;
+      legendData.push(movieNm);
+
+      // 날짜순 정렬 보장
+      const sortedBoxoffice = [...db.boxoffice].sort((a, b) => new Date(a.target_date) - new Date(b.target_date));
+      
+      if (sortedBoxoffice.length > maxDays) {
+        maxDays = sortedBoxoffice.length;
+      }
+
+      const accAudiData = sortedBoxoffice.map(day => day.acc_audi_cnt); // 누적 관객수 추출
+
+      seriesData.push({
+        name: movieNm,
+        type: 'line',
+        smooth: true,           // 곡선 처리
+        symbol: 'none',         // 점(포인트) 숨기기 (깔끔하게 선만 보이게)
+        lineStyle: { width: 3 },
+        data: accAudiData
+      });
+    });
+
+    // 3. X축 카테고리 생성 (Day 1 ~ Day N)
+    const xAxisData = Array.from({ length: maxDays }, (_, i) => `Day ${i + 1}`);
+
+    // 4. ECharts 옵션 설정
+    chartOptions.value = {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'cross' },
+        formatter: function (params) {
+          let tooltip = `<div style="font-weight:bold;margin-bottom:5px;">${params[0].axisValue}</div>`;
+          params.forEach(param => {
+            // 데이터가 없는 날(null)은 표시 생략
+            if (param.value !== undefined && param.value !== null) {
+              tooltip += `${param.marker} ${param.seriesName}: <b>${param.value.toLocaleString()}명</b><br/>`;
+            }
+          });
+          return tooltip;
+        }
+      },
+      legend: {
+        data: legendData,
+        top: 0,
+        icon: 'circle'
+      },
+      grid: {
+        left: '2%',
+        right: '4%',
+        bottom: '12%', // dataZoom을 위한 하단 여백
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: xAxisData
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: (value) => value.toLocaleString()
+        }
+      },
+      // 주식 차트 스타일의 미니맵 스크롤바 적용
+      dataZoom: [
+        {
+          type: 'inside', // 마우스 휠 및 드래그 줌
+          start: 0,
+          end: 100
+        },
+        {
+          type: 'slider', // 하단 스크롤바 UI
+          start: 0,
+          end: 100,
+          bottom: 0,
+          height: 24,
+          borderColor: '#e5e7eb',
+          fillerColor: 'rgba(59, 130, 246, 0.2)', // 슬라이더 채우기 색상
+          handleStyle: {
+            color: '#3b82f6',
+            borderColor: '#fff'
+          }
+        }
+      ],
+      series: seriesData
+    };
+
+  } catch (error) {
+    console.error("데이터 비교 중 에러:", error);
+    alert('데이터를 불러오는데 실패했습니다.');
+  } finally {
+    loading.value = false;
+  }
+};
+
+onMounted(() => {
+  fetchAndProcessData();
+});
+</script>
+
+<style scoped>
+.chart {
+  width: 100%;
+  height: 100%;
+}
+</style>
+```
+
+```
 ./src/views/DashboardView.vue
 
 <template>
@@ -594,6 +966,53 @@ export const api = {
       </div>
     </div>
 
+    <div v-if="latestData && latestData.target_date" class="mb-8">
+      <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+        📊 최신 박스오피스 요약
+        <span class="text-sm font-medium text-gray-500 bg-gray-200 px-2 py-1 rounded-md">기준일: {{ latestData.target_date }}</span>
+      </h2>
+      
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">박스오피스 순위</span>
+          <span class="text-3xl font-black text-gray-900">{{ latestData.rank_num }}<span class="text-lg font-bold text-gray-500">위</span></span>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">일일 관객수</span>
+          <div>
+            <span class="text-3xl font-black text-blue-600">{{ (latestData.audi_cnt || 0).toLocaleString() }}</span>
+            <span class="text-sm font-bold ml-1" :class="latestData.audi_change_dod > 0 ? 'text-red-500' : 'text-blue-500'">
+              ({{ latestData.audi_change_dod > 0 ? '+' : '' }}{{ (latestData.audi_change_dod || 0).toLocaleString() }})
+            </span>
+          </div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">일일 매출액</span>
+          <span class="text-3xl font-black text-gray-900">{{ (latestData.sales_amt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">원</span></span>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">누적 관객수</span>
+          <span class="text-3xl font-black text-indigo-600">{{ (latestData.acc_audi_cnt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">명</span></span>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">상영 점유율</span>
+          <span class="text-3xl font-black text-purple-600">{{ latestData.show_share || 0 }}<span class="text-lg font-bold text-gray-500">%</span></span>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">좌석 판매율</span>
+          <span class="text-3xl font-black text-rose-500">{{ latestData.seat_sales_rate || 0 }}<span class="text-lg font-bold text-gray-500">%</span></span>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">스크린수</span>
+          <span class="text-3xl font-black text-gray-900">{{ (latestData.screen_cnt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">개</span></span>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <span class="text-sm text-gray-500 font-bold mb-1">상영횟수</span>
+          <span class="text-3xl font-black text-gray-900">{{ (latestData.show_cnt || 0).toLocaleString() }}<span class="text-lg font-bold text-gray-500">회</span></span>
+        </div>
+      </div>
+    </div>
+
     <div class="sticky top-4 z-30 bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-sm mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-gray-200">
       <h2 class="text-lg font-bold flex items-center gap-2 text-gray-800">
         <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -613,17 +1032,21 @@ export const api = {
       </div>
     </div>
 
-    <div class="space-y-8 mb-12">
-      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <h3 class="text-xl font-bold mb-5 text-gray-950">요일별 관람 패턴 (타겟팅 분석)</h3>
-        <MarketingCharts :disableZoom="true" type="bar" :chartData="dowChartData" :chartOptions="dowChartOptions" />
-      </div>
-    </div>
-
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-        <h3 class="text-xl font-bold text-gray-950">일자별 상세 데이터 (Raw Data)</h3>
-        <span class="text-sm text-gray-500">총 {{ dashboardData.boxoffice.length }}일치 데이터</span>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-12">
+      <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50">
+        <div>
+          <h3 class="text-xl font-bold text-gray-950">일자별 상세 데이터</h3>
+          <p class="text-sm text-gray-500 mt-1">최근 7일치 데이터만 표시됩니다.</p>
+        </div>
+        
+        <a 
+          :href="`https://kobis.or.kr/kobis/business/main/main.do`" 
+          target="_blank" 
+          class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-sm font-bold transition-colors"
+        >
+          전체 데이터 보기 (KOBIS)
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+        </a>
       </div>
       
       <div class="overflow-x-auto">
@@ -643,7 +1066,7 @@ export const api = {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in reversedBoxoffice" :key="row.target_date" class="bg-white border-b hover:bg-gray-50 transition">
+            <tr v-for="row in recent7DaysBoxoffice" :key="row.target_date" class="bg-white border-b hover:bg-gray-50 transition">
               <td class="px-4 py-3 text-center font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">{{ row.target_date }}</td>
               <td class="px-4 py-3 text-center font-bold">{{ row.rank_num }}위</td>
               
@@ -714,20 +1137,15 @@ const props = defineProps({ movieCd: String });
 const dashboardData = ref(null);
 const loading = ref(true);
 
-// --- 추가: 기간 설정 상태 ---
 const dateFrom = ref('');
 const dateTo = ref('');
-// -------------------------
 
-// ─── 데이터 fetching 함수 분리 ───────────────────────────────────────────
 const fetchDashboardData = async (from = null, to = null) => {
   loading.value = true;
   try {
-    // 백엔드 API 호출 (날짜 파라미터 전달)
     const data = await api.getDashboard(props.movieCd, from, to);
     dashboardData.value = data;
     
-    // 처음 로딩 시에만 백엔드가 내려준 기간으로 input 값을 세팅
     if (!from && !to && data.boxoffice.length > 0) {
       dateFrom.value = data.boxoffice[0].target_date;
       dateTo.value = data.boxoffice[data.boxoffice.length - 1].target_date;
@@ -739,7 +1157,6 @@ const fetchDashboardData = async (from = null, to = null) => {
   }
 };
 
-// 기간 적용 버튼 클릭 시
 const applyDateRange = () => {
   if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
     alert('시작일은 종료일보다 빠를 수 없습니다.');
@@ -748,35 +1165,28 @@ const applyDateRange = () => {
   fetchDashboardData(dateFrom.value, dateTo.value);
 };
 
-// ─── 데이터 가공 (Computed) - 기존 로직 유지하되 스타일링 옵션만 강화 ──────
-
-// (sortedBoxoffice, latestData, prevData, seatSalesDod 로직 동일)
 const sortedBoxoffice = computed(() => 
   dashboardData.value?.boxoffice.slice().sort((a, b) => new Date(a.target_date) - new Date(b.target_date)) || []
 );
 const reversedBoxoffice = computed(() => {
   return [...sortedBoxoffice.value].reverse();
 });
+// ✨ 템플릿의 테이블에서 이 값을 사용하여 최근 7일치만 렌더링하도록 변경됨
 const recent7DaysBoxoffice = computed(() => {
   return reversedBoxoffice.value.slice(0, 7);
 });
-const latestData = computed(() => sortedBoxoffice.value[sortedBoxoffice.value.length - 1] || {});
-const prevData = computed(() => sortedBoxoffice.value[sortedBoxoffice.value.length - 2] || {});
-const seatSalesDod = computed(() => {
-  if (!prevData.value.seat_sales_rate) return 0;
-  return Number(latestData.value.seat_sales_rate) - Number(prevData.value.seat_sales_rate);
-});
 
-// 차트 1: 누적 vs 일일 관객 (혼합)
+// ✨ 가장 최근(전일자) 데이터
+const latestData = computed(() => sortedBoxoffice.value[sortedBoxoffice.value.length - 1] || {});
+
 const trendChartData = computed(() => ({
   labels: sortedBoxoffice.value.map(d => d.target_date),
   datasets: [
-    { type: 'line', label: '누적 관객수', data: sortedBoxoffice.value.map(d => d.acc_audi_cnt), borderColor: '#f59e0b', yAxisID: 'y1', tension: 0.1, pointRadius: 2 }, // 점 크기 줄임 (줌 했을 때 보기 좋게)
+    { type: 'line', label: '누적 관객수', data: sortedBoxoffice.value.map(d => d.acc_audi_cnt), borderColor: '#f59e0b', yAxisID: 'y1', tension: 0.1, pointRadius: 2 },
     { type: 'bar', label: '일일 관객수', data: sortedBoxoffice.value.map(d => d.audi_cnt), backgroundColor: 'rgba(59, 130, 246, 0.7)', yAxisID: 'y', barPercentage: 0.8 }
   ]
 }));
 const trendChartOptions = {
-  // (Scales 옵션 동일)
   responsive: true, maintainAspectRatio: false,
   scales: {
     y: { type: 'linear', position: 'left', title: { display: true, text: '일일 관객' } },
@@ -784,7 +1194,6 @@ const trendChartOptions = {
   }
 };
 
-// 차트 2: 상영점유율 vs 좌석판매율 (Line)
 const efficiencyChartData = computed(() => ({
   labels: sortedBoxoffice.value.map(d => d.target_date),
   datasets: [
@@ -795,12 +1204,10 @@ const efficiencyChartData = computed(() => ({
 const efficiencyChartOptions = {
   responsive: true, maintainAspectRatio: false,
   interaction: { mode: 'index', intersect: false },
-  scales: { y: { type: 'linear', position: 'left', title: { display: true, text: '비율 (%)' }, min: 0, max: 100 } } // 비율이므로 0~100 고정
+  scales: { y: { type: 'linear', position: 'left', title: { display: true, text: '비율 (%)' }, min: 0, max: 100 } }
 };
 
-// 차트 3: 요일별 평균 (Bar)
 const dowChartData = computed(() => {
-  // (요일 집계 로직 동일)
   const sums = [0, 0, 0, 0, 0, 0, 0]; const counts = [0, 0, 0, 0, 0, 0, 0];
   sortedBoxoffice.value.forEach(d => {
     const dayIdx = new Date(d.target_date).getDay(); sums[dayIdx] += d.audi_cnt || 0; counts[dayIdx] += 1;
@@ -811,7 +1218,7 @@ const dowChartData = computed(() => {
     datasets: [{
       label: '요일별 평균 관객수',
       data: [averages[1], averages[2], averages[3], averages[4], averages[5], averages[6], averages[0]],
-      backgroundColor: ['#e5e7eb', '#e5e7eb', '#e5e7eb', '#e5e7eb', '#bfdbfe', '#fecdd3', '#fecdd3'], // 색상 좀 더 부드럽게 gray-200, blue-200, rose-200
+      backgroundColor: ['#e5e7eb', '#e5e7eb', '#e5e7eb', '#e5e7eb', '#bfdbfe', '#fecdd3', '#fecdd3'],
       borderRadius: 8
     }]
   };
@@ -820,18 +1227,15 @@ const dowChartOptions = {
   responsive: true, maintainAspectRatio: false,
   plugins: { 
     legend: { display: false },
-    // 이 차트는 데이터가 7개뿐이므로 줌 기능 끔
     zoom: { zoom: { wheel: { enabled: false }, pinch: { enabled: false } }, pan: { enabled: false } }
   },
   scales: { x: { grid: { display: false } } }
 };
 
-// ─── 초기 호출 ─────────────────────────────────────────────────────────
 onMounted(() => {
-  fetchDashboardData(); // 기간 없이 초기 로딩
+  fetchDashboardData(); 
 });
 </script>
-
 ```
 
 ```
@@ -901,6 +1305,11 @@ const routes = [
     name: 'Dashboard',
     component: DashboardView,
     props: true,
+  },
+  {
+    path: '/compare',
+    name: 'Compare',
+    component: () => import('../views/CompareView.vue'),
   }
 ]
 
